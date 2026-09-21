@@ -1,3 +1,5 @@
-.venv
-__pycache__
+.cursor/
+.venv/
+__pycache__/
+*.pyc
 uv.lock
