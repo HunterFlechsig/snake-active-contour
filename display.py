@@ -77,6 +77,17 @@ def display_snake(snake, image):
     redraw_image(display)
 
 
+def save_snapshot(path, image, snakes, springs=None, volcanoes=None, volcano_radius=20):
+    overlay = render_overlay(
+        image,
+        snakes=snakes,
+        springs=springs,
+        volcanoes=volcanoes,
+        volcano_radius=volcano_radius,
+    )
+    cv2.imwrite(str(path), overlay)
+
+
 def format_status(iteration, sigma, n_snakes, n_springs, n_volcanoes, paused, finished=False):
     state = "done" if finished else ("paused" if paused else "running")
     return (
