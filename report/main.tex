@@ -165,12 +165,12 @@ A volcano at $p$ is a $1/r$ repulsion, with strength $c=900$, cut off inside a c
 \end{equation}
 A click places a volcano that stays put. Right-dragging, or the mouse-volcano toggle, puts $p$ at the cursor. Beads outside the crater are pushed away from $p$. Beads inside feel nothing.
 
-Figure~\ref{fig:constraints} draws both on the initial circle. Blue is the spring: the line runs to the pin, and the arrow is the pull on that bead. Orange is the volcano: the ring is the crater, and the arrows on the nearby beads point away from it.
+Figure~\ref{fig:constraints} shows both on the running example. Springs on the left pull beads outward toward the pins. The volcano on the right pushes beads away, and that side of the contour bends inward.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.78\linewidth]{constraints.png}
-  \caption{Snake Pit forces on the initial circle. Blue: a spring and its pull toward the pin. Orange: a volcano and the push on beads outside the crater. Arrow lengths are scaled for display.}
+  \includegraphics[width=\linewidth]{constraints2.png}
+  \caption{Springs pull beads outward on the left. The volcano on the right pushes beads away, so the contour bends in on that side.}
   \label{fig:constraints}
 \end{figure}
 
@@ -193,7 +193,7 @@ Auto-finish repeats this step while $\sigma$ walks through $5$, $3$, and $1.5$, 
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{iteration.png}
+  \includegraphics[width=\textwidth]{iteration.png}
   \caption{Edge energy only, from the circle in Figure~\ref{fig:init}. The loop tightens, meets the boundary, and settles. The square's corners stay rounded.}
   \label{fig:iteration}
 \end{figure}

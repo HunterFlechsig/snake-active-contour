@@ -394,10 +394,12 @@ def main():
             frames[i] = snake.copy()
             print(f"iter {i:3d}  max move {move:.4f}")
 
-    fig, axes = plt.subplots(1, 4, figsize=(7.8, 2.6))
-    for ax, step in zip(axes, show):
+    fig, axes = plt.subplots(2, 2, figsize=(7.2, 6.4))
+    for ax, step in zip(axes.ravel(), show):
         ax.imshow(image, cmap="gray", vmin=0, vmax=255, origin="upper")
-        overlay_snake(ax, frames[step], color="#d62728", lw=1.0, ms=3)
+        overlay_snake(ax, frames[step], color="#d62728", lw=1.1, ms=4)
+        ax.set_xlim(15, 355)
+        ax.set_ylim(370, 10)
         ax.set_title(f"step {step}")
         ax.set_axis_off()
     fig.tight_layout()
