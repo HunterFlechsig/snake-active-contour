@@ -1,54 +1,30 @@
-"""Contour picking, Snake Pit mouse, buttons, and key bindings."""
+"""Contour picking, Snake Pit mouse, and keyboard bindings."""
 
 import cv2
 import numpy as np
 
 from display import bind_mouse, redraw_image, render_contour_preview
+from physics import initialize_snake, initialize_snake_from_polyline
 
 
-def nearest_snake_index(snake, point, max_dist):
-    distances = np.linalg.norm(snake - np.asarray(point, dtype=np.float64), axis=1)
-    index = int(np.argmin(distances))
-    if distances[index] <= max_dist:
-        return index
-    return None
+def nearest_point(snakes, point, max_dist):
+    """Closest bead across all snakes, or None if none are within max_dist."""
 
-
-def make_pit_buttons(image_shape):
-    _height, width = image_shape[:2]
-    button_w, button_h, gap, top = 118, 26, 6, 8
-    mouse_x = width - gap - button_w
-    place_x = mouse_x - gap - button_w
-    auto_x = place_x - gap - button_w
-    return [
-        {
-            "id": "auto",
-            "label": "Auto finish",
-            "rect": (auto_x, top, button_w, button_h),
-        },
-        {
-            "id": "place",
-            "label": "Place volcano",
-            "rect": (place_x, top, button_w, button_h),
-        },
-        {
-            "id": "mouse",
-            "label": "Mouse volcano",
-            "rect": (mouse_x, top, button_w, button_h),
-        },
-    ]
-
-
-def hit_button(x, y, buttons):
-    for button in buttons:
-        bx, by, bw, bh = button["rect"]
-        if bx <= x <= bx + bw and by <= y <= by + bh:
-            return button["id"]
-    return None
+    best = None
+    best_dist = max_dist
+    for snake_index, snake in enumerate(snakes):
+        distances = np.linalg.norm(
+            snake - np.asarray(point, dtype=np.float64), axis=1,
+        )
+        index = int(np.argmin(distances))
+        if distances[index] <= best_dist:
+            best_dist = distances[index]
+            best = (snake_index, index)
+    return best
 
 
 class SnakePit:
-    """Mouse-driven springs and volcano from Kass section 2.2."""
+    """Keyboard-armed, mouse-aimed springs and volcanoes."""
 
     def __init__(self, pick_radius=18.0):
         self.pick_radius = pick_radius
@@ -62,46 +38,40 @@ class SnakePit:
         self.auto_requested = False
         self.auto_running = False
 
-    def handle_mouse(self, event, x, y, snake, buttons=None):
+    def handle_mouse(self, event, x, y, snakes):
         self.mouse = np.array([x, y], dtype=np.float64)
-        buttons = buttons or []
 
         if event == cv2.EVENT_MOUSEMOVE:
             self._follow_mouse()
             return
 
         if event == cv2.EVENT_LBUTTONDOWN:
-            hit = hit_button(x, y, buttons)
-            if hit == "place":
-                self.place_mode = not self.place_mode
-                return
-            if hit == "mouse":
-                self.mouse_volcano_on = not self.mouse_volcano_on
-                return
-            if hit == "auto":
-                self.auto_requested = True
-                return
             if self.place_mode:
                 self.placed_volcanoes.append(self.mouse.copy())
                 self.place_mode = False
+                print(f"Volcano placed at ({x}, {y}).")
                 return
-            self._grab_or_make_spring(snake)
+            self._grab_or_make_spring(snakes)
         elif event == cv2.EVENT_LBUTTONUP:
-            self._release_spring(snake)
+            self._release_spring(snakes)
         elif event == cv2.EVENT_RBUTTONDOWN:
             self.volcano_live = True
+            print("Mouse volcano ON (right mouse).")
         elif event == cv2.EVENT_RBUTTONUP:
             self.volcano_live = False
+            print("Mouse volcano OFF.")
         elif event == cv2.EVENT_MBUTTONDOWN:
-            self.delete_nearest_constraint(snake)
+            self.delete_nearest_constraint(snakes)
 
     def sync(self):
         self._follow_mouse()
 
     def _follow_mouse(self):
         if self.dragging is not None:
-            self.springs[self.dragging]["anchor"] = self.mouse.copy()
-            self.springs[self.dragging]["j"] = None
+            spring = self.springs[self.dragging]
+            spring["anchor"] = self.mouse.copy()
+            spring["j"] = None
+            spring["other_snake"] = None
 
     def live_volcano(self):
         if self.volcano_live or self.mouse_volcano_on:
@@ -115,60 +85,62 @@ class SnakePit:
             volcanoes.append(live)
         return volcanoes
 
-    def active_button_ids(self):
-        active = []
-        if self.place_mode:
-            active.append("place")
-        if self.mouse_volcano_on or self.volcano_live:
-            active.append("mouse")
-        if self.auto_running or self.auto_requested:
-            active.append("auto")
-        return active
-
-    def _grab_or_make_spring(self, snake):
-        index = nearest_snake_index(snake, self.mouse, self.pick_radius)
-        if index is None:
+    def _grab_or_make_spring(self, snakes):
+        hit = nearest_point(snakes, self.mouse, self.pick_radius)
+        if hit is None:
             return
 
+        snake_index, index = hit
         for i, spring in enumerate(self.springs):
-            if spring["i"] == index and spring.get("j") is None:
+            if (
+                spring.get("snake", 0) == snake_index
+                and spring["i"] == index
+                and spring.get("other_snake") is None
+            ):
                 self.dragging = i
                 spring["anchor"] = self.mouse.copy()
                 return
 
         self.springs.append(
             {
+                "snake": snake_index,
                 "i": index,
+                "other_snake": None,
                 "j": None,
                 "anchor": self.mouse.copy(),
             }
         )
         self.dragging = len(self.springs) - 1
 
-    def _release_spring(self, snake):
+    def _release_spring(self, snakes):
         if self.dragging is None:
             return
 
         spring = self.springs[self.dragging]
-        other = nearest_snake_index(snake, self.mouse, self.pick_radius)
-        if other is not None and other != spring["i"]:
-            spring["j"] = other
+        hit = nearest_point(snakes, self.mouse, self.pick_radius)
+        owner = spring.get("snake", 0)
+        if hit is not None and hit != (owner, spring["i"]):
+            spring["other_snake"] = hit[0]
+            spring["j"] = hit[1]
             spring["anchor"] = None
         else:
+            spring["other_snake"] = None
             spring["j"] = None
             spring["anchor"] = self.mouse.copy()
 
         self.dragging = None
 
-    def delete_nearest_constraint(self, snake):
+    def delete_nearest_constraint(self, snakes):
         best_kind = None
         best_i = None
         best_dist = self.pick_radius
 
         for i, spring in enumerate(self.springs):
-            start = snake[spring["i"]]
-            if spring.get("j") is not None:
-                end = snake[spring["j"]]
+            start = snakes[spring.get("snake", 0)][spring["i"]]
+            if spring.get("other_snake") is not None:
+                end = snakes[spring["other_snake"]][spring["j"]]
+            elif spring.get("j") is not None:
+                end = snakes[spring.get("snake", 0)][spring["j"]]
             else:
                 end = spring["anchor"]
             dist = min(
@@ -190,32 +162,58 @@ class SnakePit:
         if best_kind == "spring":
             self.springs.pop(best_i)
             self.dragging = None
+            print("Deleted a spring.")
         elif best_kind == "volcano":
             self.placed_volcanoes.pop(best_i)
+            print("Deleted a volcano.")
+        else:
+            print("Nothing nearby to delete.")
 
-    def delete_nearest_spring(self, snake):
-        self.delete_nearest_constraint(snake)
+    def delete_nearest_spring(self, snakes):
+        self.delete_nearest_constraint(snakes)
 
     def clear_volcano(self):
         self.placed_volcanoes = []
         self.place_mode = False
         self.mouse_volcano_on = False
         self.volcano_live = False
+        print("Cleared all volcanoes.")
 
     def clear_springs(self):
         self.springs = []
         self.dragging = None
+        print("Cleared all springs.")
+
+    def toggle_place_mode(self):
+        self.place_mode = not self.place_mode
+        if self.place_mode:
+            print("Place volcano: click the image to pin one.")
+        else:
+            print("Place volcano cancelled.")
+
+    def toggle_mouse_volcano(self):
+        self.mouse_volcano_on = not self.mouse_volcano_on
+        if self.mouse_volcano_on:
+            print("Mouse volcano ON — follows the cursor.")
+        else:
+            print("Mouse volcano OFF.")
 
 
-def install_pit_mouse(pit, holder, buttons):
+def install_pit_mouse(pit, holder):
     def on_event(event, x, y, flags, param):
-        pit.handle_mouse(event, x, y, holder["snake"], buttons)
+        pit.handle_mouse(event, x, y, holder["snakes"])
 
     bind_mouse(on_event)
 
 
-def handle_key(key, pit, snake, paused, sigma):
-    """Apply one live-loop key. Returns (quit, paused, sigma, rebuild_forces, start_auto)."""
+def handle_key(key, pit, snakes, paused, sigma):
+    """Apply one live-loop key.
+
+    Returns (quit, paused, sigma, rebuild_forces, start_auto).
+    """
+
+    if key == 255 or key == -1:
+        return False, paused, sigma, False, False
 
     if key == ord("q"):
         return True, paused, sigma, False, False
@@ -225,47 +223,100 @@ def handle_key(key, pit, snake, paused, sigma):
 
     if key == ord(" "):
         paused = not paused
-    if key == ord("v"):
+        print("Paused." if paused else "Running.")
+    elif key == ord("p"):
+        pit.toggle_place_mode()
+    elif key == ord("m"):
+        pit.toggle_mouse_volcano()
+    elif key == ord("v"):
         pit.clear_volcano()
-    if key == ord("s"):
+    elif key == ord("s"):
         pit.clear_springs()
-    if key == ord("x"):
-        pit.delete_nearest_spring(snake)
-    if key in (ord("1"), ord("2"), ord("3"), ord("4"), ord("5")):
+    elif key == ord("x"):
+        pit.delete_nearest_spring(snakes)
+    elif key == ord("h"):
+        print_runtime_help()
+    elif key == ord("a"):
+        print("Auto finish requested.")
+    elif key in (ord("1"), ord("2"), ord("3"), ord("4"), ord("5")):
         sigma = float(key - ord("0"))
         rebuild_forces = True
-        print(f"sigma = {sigma:.1f}")
+        print(f"Blur sigma = {sigma:.1f}")
 
     return False, paused, sigma, rebuild_forces, start_auto
 
 
+def print_setup_help():
+    print()
+    print("=" * 62)
+    print("  SNAKES — setup")
+    print("  Click the image window so keys go there, not this terminal.")
+    print("=" * 62)
+    print("  Draw one snake")
+    print("    click        add a point")
+    print("    Backspace    undo last point")
+    print("    c            circle mode (center, then a rim point)")
+    print("    p            polyline mode (click around the object)")
+    print("    Enter        close this snake")
+    print()
+    print("  After a snake is closed")
+    print("    n            draw another snake")
+    print("    Enter        start the run")
+    print("    q            quit")
+    print("=" * 62)
+    print()
+
+
 def print_runtime_help():
-    print("Snake is minimizing. Drag it with springs or push it with the volcano.")
-    print("Place volcano: click the button, then click the image to pin one.")
-    print("Mouse volcano: toggle the button, or hold right-click to follow the cursor.")
-    print("Left-drag a bead: spring. x/M-click deletes the nearest spring or volcano.")
-    print("1-5 change blur, space pauses, a / Auto finish settles then stops, v clears volcanoes, q quits.")
+    print()
+    print("=" * 62)
+    print("  SNAKES — running")
+    print("  Click the image window so keys go there, not this terminal.")
+    print("=" * 62)
+    print("  Springs")
+    print("    left-drag a bead    pull with a spring")
+    print("    release in empty    pin that end")
+    print("    release on a bead   spring between beads (any snake)")
+    print("    x                   delete nearest spring or volcano")
+    print("    s                   clear all springs")
+    print()
+    print("  Volcano")
+    print("    p then click        place a volcano (stays put)")
+    print("    m                   toggle mouse volcano (follows cursor)")
+    print("    right-drag          mouse volcano while held")
+    print("    v                   clear all volcanoes")
+    print()
+    print("  Solve")
+    print("    space               pause / resume")
+    print("    a                   auto finish (settle, then stop)")
+    print("    1-5                 blur amount")
+    print("    h                   print this help again")
+    print("    q                   quit")
+    print("=" * 62)
+    print()
 
 
-def get_initial_contour(image):
-    """Snake Pit style start: click points around the object, or 'c' for a circle."""
+def get_initial_contour(image, existing_snakes=None, snake_number=1):
+    """Click points for one snake. Returns (points, mode) or (None, None) on quit."""
 
+    existing_snakes = existing_snakes or []
     points = []
     mode = "polyline"
     finished = False
 
-    print("Click points around the object, then press Enter to close the snake.")
-    print("Press 'c' for the old circle shortcut (center, then a rim point).")
-    print("Backspace undoes a point. q quits.")
+    print(f"Snake {snake_number}: click around the object, then Enter to close.")
+    print("  c = circle, p = polyline, Backspace = undo, q = quit")
 
     def redraw():
-        redraw_image(render_contour_preview(image, points, mode))
+        redraw_image(
+            render_contour_preview(image, points, mode, existing_snakes)
+        )
 
     def on_click(event, x, y, flags, param):
         if event != cv2.EVENT_LBUTTONDOWN:
             return
         points.append((x, y))
-        print(f"Point registered at: X={x}, Y={y}")
+        print(f"  point {len(points)} at ({x}, {y})")
         redraw()
 
     bind_mouse(on_click)
@@ -274,30 +325,31 @@ def get_initial_contour(image):
     while not finished:
         key = cv2.waitKey(20) & 0xFF
 
-        if key in (13, 32):
+        if key in (13,):
             if mode == "circle" and len(points) >= 2:
                 finished = True
             elif mode == "polyline" and len(points) >= 3:
                 finished = True
             else:
                 need = 2 if mode == "circle" else 3
-                print(f"Need at least {need} points before starting.")
+                print(f"  Need at least {need} points before closing.")
 
         elif key == ord("c"):
             mode = "circle"
             points.clear()
-            print("Circle mode: click the center, then a rim point.")
+            print("  Circle mode: click the center, then a rim point.")
             redraw()
 
         elif key == ord("p"):
             mode = "polyline"
             points.clear()
-            print("Polyline mode: click around the object, then Enter.")
+            print("  Polyline mode: click around the object, then Enter.")
             redraw()
 
         elif key in (8, 127):
             if points:
                 points.pop()
+                print(f"  undid last point ({len(points)} left)")
                 redraw()
 
         elif key == ord("q"):
@@ -307,3 +359,37 @@ def get_initial_contour(image):
             finished = True
 
     return points, mode
+
+
+def collect_snakes(image):
+    """Draw one or more snakes, then Enter to start the run."""
+
+    print_setup_help()
+    snakes = []
+
+    while True:
+        points, mode = get_initial_contour(
+            image,
+            existing_snakes=snakes,
+            snake_number=len(snakes) + 1,
+        )
+        if points is None:
+            return None if not snakes else snakes
+
+        if mode == "circle":
+            snakes.append(initialize_snake(points))
+        else:
+            snakes.append(initialize_snake_from_polyline(points))
+
+        redraw_image(render_contour_preview(image, [], "polyline", snakes))
+        print(f"Added snake {len(snakes)}.")
+        print("  n = another snake   Enter = start run   q = quit")
+
+        while True:
+            key = cv2.waitKey(50) & 0xFF
+            if key in (ord("n"), ord("N")):
+                break
+            if key in (13, 32):
+                return snakes
+            if key == ord("q"):
+                return snakes

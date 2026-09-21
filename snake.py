@@ -2,33 +2,31 @@
 
 import cv2
 
-from display import (
-    close_window,
-    display_image,
-    format_status,
-    redraw_image,
-    render_overlay,
-)
+from display import close_window, display_image, format_status, redraw_image, render_overlay
 from interaction import (
     SnakePit,
-    get_initial_contour,
+    collect_snakes,
     handle_key,
     install_pit_mouse,
-    make_pit_buttons,
     print_runtime_help,
 )
 from physics import (
     build_implicit_operator_inverse,
     compute_image_force_field,
-    evolve_snake,
-    initialize_snake,
-    initialize_snake_from_polyline,
-    step_snake,
+    evolve_snakes,
+    step_all_snakes,
 )
 
 
 def load_image():
     return cv2.imread("coins.jpg", cv2.IMREAD_GRAYSCALE)
+
+
+def build_operators(snakes, alpha, beta, gamma):
+    return [
+        build_implicit_operator_inverse(len(snake), alpha, beta, gamma)
+        for snake in snakes
+    ]
 
 
 def main():
@@ -56,69 +54,63 @@ def main():
 
     display_image(image)
 
-    points, mode = get_initial_contour(image)
-    if points is None:
+    snakes = collect_snakes(image)
+    if not snakes:
         close_window()
         return
 
-    if mode == "circle":
-        snake = initialize_snake(points)
-    else:
-        snake = initialize_snake_from_polyline(points)
-
     pit = SnakePit()
-    holder = {"snake": snake}
-    buttons = make_pit_buttons(image.shape)
-    install_pit_mouse(pit, holder, buttons)
+    holder = {"snakes": snakes}
+    install_pit_mouse(pit, holder)
 
+    print(f"Starting with {len(snakes)} snake(s).")
     print_runtime_help()
 
     force_field = compute_image_force_field(
         image, W_LINE, W_EDGE, W_TERM, SIGMA,
     )
-    inv_operator = build_implicit_operator_inverse(len(snake), ALPHA, BETA, GAMMA)
+    operators = build_operators(snakes, ALPHA, BETA, GAMMA)
     paused = False
     finished = False
     iteration = 0
 
-    def draw_frame(current_snake, current_sigma, current_paused, current_finished):
-        status = format_status(
-            iteration,
-            current_sigma,
-            len(pit.springs),
-            len(pit.all_volcanoes()),
-            current_paused,
-            current_finished,
-        )
+    def draw_frame(current_snakes):
         display = render_overlay(
             image,
-            current_snake,
+            snakes=current_snakes,
             springs=pit.springs,
             volcanoes=pit.all_volcanoes(),
             volcano_radius=VOLCANO_RADIUS,
-            buttons=buttons,
-            active_button_ids=pit.active_button_ids(),
-            help_lines=[
-                "Auto finish settles the snake then stops  |  Place volcano pins  |  Mouse volcano follows",
-                status,
-            ],
         )
         redraw_image(display)
 
-    def run_auto_finish(current_snake):
+    def print_status(current_sigma, current_paused, current_finished):
+        print(
+            format_status(
+                iteration,
+                current_sigma,
+                len(holder["snakes"]),
+                len(pit.springs),
+                len(pit.all_volcanoes()),
+                current_paused,
+                current_finished,
+            )
+        )
+
+    def run_auto_finish(current_snakes):
         nonlocal iteration
         pit.auto_requested = False
         pit.auto_running = True
         pit.mouse_volcano_on = False
         pit.volcano_live = False
         pit.clear_springs()
-        print("Auto finish: running until the snake settles (press q to abort).")
+        print("Auto finish: running until every snake settles (q aborts).")
 
-        def on_iteration(total_iterations, evolving_snake, sigma, displacement):
+        def on_iteration(total_iterations, evolving_snakes, sigma, displacement):
             nonlocal iteration
             iteration = start_iteration + total_iterations
-            holder["snake"] = evolving_snake
-            draw_frame(evolving_snake, sigma, False, False)
+            holder["snakes"] = evolving_snakes
+            draw_frame(evolving_snakes)
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q"):
                 return False
@@ -130,8 +122,8 @@ def main():
             return True
 
         start_iteration = iteration
-        current_snake, extra = evolve_snake(
-            current_snake,
+        current_snakes, extra = evolve_snakes(
+            current_snakes,
             image,
             alpha=ALPHA,
             beta=BETA,
@@ -150,12 +142,12 @@ def main():
         iteration = start_iteration + extra
         pit.auto_running = False
         print(f"Auto finish done after {extra} iterations.")
-        return current_snake
+        return current_snakes
 
     while True:
         key = cv2.waitKey(1) & 0xFF
         should_quit, paused, SIGMA, rebuild_forces, start_auto = handle_key(
-            key, pit, snake, paused, SIGMA,
+            key, pit, snakes, paused, SIGMA,
         )
         if should_quit:
             break
@@ -165,24 +157,23 @@ def main():
             )
 
         if pit.auto_requested or start_auto:
-            snake = run_auto_finish(snake)
-            holder["snake"] = snake
-            paused = True
-            finished = True
-            inv_operator = build_implicit_operator_inverse(
-                len(snake), ALPHA, BETA, GAMMA,
-            )
+            snakes = run_auto_finish(snakes)
+            holder["snakes"] = snakes
+            operators = build_operators(snakes, ALPHA, BETA, GAMMA)
             force_field = compute_image_force_field(
                 image, W_LINE, W_EDGE, W_TERM, SIGMA,
             )
+            paused = True
+            finished = True
+            print_status(SIGMA, paused, finished)
 
         pit.sync()
 
         if not paused:
             finished = False
-            snake = step_snake(
-                snake,
-                inv_operator,
+            snakes = step_all_snakes(
+                snakes,
+                operators,
                 GAMMA,
                 KAPPA,
                 force_field,
@@ -194,10 +185,12 @@ def main():
                 VOLCANO_K,
                 VOLCANO_RADIUS,
             )
-            holder["snake"] = snake
+            holder["snakes"] = snakes
             iteration += 1
+            if iteration == 1 or iteration % 50 == 0:
+                print_status(SIGMA, paused, finished)
 
-        draw_frame(snake, SIGMA, paused, finished)
+        draw_frame(snakes)
 
     close_window()
 

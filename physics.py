@@ -165,23 +165,38 @@ def sample_image_forces(force_field, snake):
     ])
 
 
-def constraint_forces(snake, springs, volcanoes, spring_k, volcano_k, volcano_radius):
-    """∇E_con from Snake Pit springs and the clipped 1/r volcano.
+def constraint_forces(
+    snake_index,
+    snakes,
+    springs,
+    volcanoes,
+    spring_k,
+    volcano_k,
+    volcano_radius,
+):
+    """∇E_con on one snake from springs (possibly between snakes) and volcanoes."""
 
-    Spring energy is (k/2)|x1 - x2|^2. Volcano energy is k / max(r, r0),
-    which is high at the mouse and therefore repulsive.
-    """
-
+    snake = snakes[snake_index]
     forces = np.zeros_like(snake)
 
     for spring in springs:
         i = spring["i"]
-        if spring.get("j") is not None:
-            delta = snake[i] - snake[spring["j"]]
-            forces[i] += spring_k * delta
-            forces[spring["j"]] -= spring_k * delta
-        else:
-            forces[i] += spring_k * (snake[i] - spring["anchor"])
+        owner = spring.get("snake", 0)
+        other_snake = spring.get("other_snake")
+        if other_snake is None and spring.get("j") is not None:
+            other_snake = owner
+
+        if owner == snake_index:
+            if other_snake is not None:
+                other = snakes[other_snake][spring["j"]]
+                forces[i] += spring_k * (snake[i] - other)
+            else:
+                forces[i] += spring_k * (snake[i] - spring["anchor"])
+
+        if other_snake == snake_index:
+            other = snakes[owner][i]
+            j = spring["j"]
+            forces[j] += spring_k * (snake[j] - other)
 
     for volcano in volcanoes:
         delta = snake - np.asarray(volcano, dtype=np.float64)
@@ -257,12 +272,19 @@ def step_snake(
     spring_k=0.0,
     volcano_k=0.0,
     volcano_radius=20.0,
+    snakes=None,
+    snake_index=0,
 ):
     """One implicit Euler step: sample ∇E, add constraints, update, clip."""
 
+    if snakes is None:
+        snakes = [snake]
+        snake_index = 0
+
     image_forces = sample_image_forces(force_field, snake)
     extra_forces = constraint_forces(
-        snake,
+        snake_index,
+        snakes,
         springs,
         volcanoes,
         spring_k,
@@ -279,6 +301,41 @@ def step_snake(
         max_px_move,
     )
     return clip_snake_to_image(updated, image_shape)
+
+
+def step_all_snakes(
+    snakes,
+    operators,
+    gamma,
+    kappa,
+    force_field,
+    max_px_move,
+    image_shape,
+    springs=(),
+    volcanoes=(),
+    spring_k=0.0,
+    volcano_k=0.0,
+    volcano_radius=20.0,
+):
+    return [
+        step_snake(
+            snake,
+            operator,
+            gamma,
+            kappa,
+            force_field,
+            max_px_move,
+            image_shape,
+            springs=springs,
+            volcanoes=volcanoes,
+            spring_k=spring_k,
+            volcano_k=volcano_k,
+            volcano_radius=volcano_radius,
+            snakes=snakes,
+            snake_index=index,
+        )
+        for index, (snake, operator) in enumerate(zip(snakes, operators))
+    ]
 
 
 def evolve_snake(
@@ -349,3 +406,76 @@ def evolve_snake(
                 history.clear()
 
     return snake, total_iterations
+
+
+def evolve_snakes(
+    snakes,
+    image,
+    alpha,
+    beta,
+    gamma,
+    kappa,
+    w_line,
+    w_edge,
+    w_term,
+    sigmas,
+    max_iterations,
+    convergence,
+    max_px_move,
+    resample_every,
+    on_iteration=None,
+):
+    snakes = [snake.astype(np.float64, copy=True) for snake in snakes]
+    operators = [
+        build_implicit_operator_inverse(len(snake), alpha, beta, gamma)
+        for snake in snakes
+    ]
+    total_iterations = 0
+
+    for sigma in sigmas:
+        force_field = compute_image_force_field(
+            image, w_line, w_edge, w_term, sigma,
+        )
+        snakes = [resample_snake(snake) for snake in snakes]
+        histories = [deque(maxlen=10) for _ in snakes]
+
+        for iteration in range(max_iterations):
+            previous = [snake.copy() for snake in snakes]
+            snakes = step_all_snakes(
+                snakes,
+                operators,
+                gamma,
+                kappa,
+                force_field,
+                max_px_move,
+                image.shape,
+            )
+            displacement = max(
+                np.max(np.linalg.norm(new - old, axis=1))
+                for new, old in zip(snakes, previous)
+            )
+            total_iterations += 1
+
+            if on_iteration is not None:
+                keep_going = on_iteration(
+                    total_iterations, snakes, sigma, displacement,
+                )
+                if keep_going is False:
+                    return snakes, total_iterations
+
+            if all(
+                has_converged(history, snake, convergence)
+                for history, snake in zip(histories, snakes)
+            ):
+                snakes = [resample_snake(snake) for snake in snakes]
+                break
+
+            for history, snake in zip(histories, snakes):
+                history.append(snake.copy())
+
+            if resample_every and (iteration + 1) % resample_every == 0:
+                snakes = [resample_snake(snake) for snake in snakes]
+                for history in histories:
+                    history.clear()
+
+    return snakes, total_iterations
