@@ -28,6 +28,8 @@ from physics import (
 )
 
 SNAPSHOT_EVERY = 25
+IMAGES_DIR = Path("images")
+DEFAULT_IMAGE = "coins.jpg"
 
 
 def parse_args():
@@ -56,7 +58,31 @@ def parse_args():
             f"(default: {SNAPSHOT_EVERY}; 0 disables)."
         ),
     )
+    parser.add_argument(
+        "--image",
+        default=DEFAULT_IMAGE,
+        metavar="FILE",
+        help=(
+            f"Image filename or path. Bare names are loaded from {IMAGES_DIR}/ "
+            f"(default: {DEFAULT_IMAGE})."
+        ),
+    )
     return parser.parse_args()
+
+
+def resolve_image_path(name):
+    candidate = Path(name)
+    if candidate.exists():
+        return candidate
+
+    in_images = IMAGES_DIR / name
+    if in_images.exists():
+        return in_images
+
+    raise SystemExit(
+        f"Image not found: {name}\n"
+        f"Looked at {candidate.resolve()} and {in_images.resolve()}."
+    )
 
 
 def results_dir(test_number):
@@ -65,8 +91,11 @@ def results_dir(test_number):
     return path
 
 
-def load_image():
-    return cv2.imread("coins.jpg", cv2.IMREAD_GRAYSCALE)
+def load_image(path):
+    image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if image is None:
+        raise SystemExit(f"Could not read image: {path}")
+    return image
 
 
 def build_operators(snakes, alpha, beta, gamma):
@@ -80,6 +109,7 @@ def write_run_notes(folder, args, extra_lines):
     notes = folder / "run.txt"
     notes.write_text("\n".join([
         f"test={args.test}",
+        f"image={args.image}",
         f"converge={args.converge}",
         f"snapshot_every={args.snapshot_every}",
         *extra_lines,
@@ -91,8 +121,9 @@ def main():
 
     args = parse_args()
     out_dir = results_dir(args.test)
+    image_path = resolve_image_path(args.image)
 
-    image = load_image()
+    image = load_image(image_path)
 
     ALPHA = 0.08
     BETA = 0.40
@@ -125,6 +156,7 @@ def main():
     install_pit_mouse(pit, holder)
 
     print(f"Starting with {len(snakes)} snake(s).")
+    print(f"Image: {image_path}")
     print(f"Results folder: {out_dir}")
     if args.converge:
         print("Converge-first: snakes will settle before the live loop.")
