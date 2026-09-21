@@ -194,14 +194,14 @@ def main():
 
     image = load_image()
 
-    ALPHA = 1.0
-    BETA = 1.0
+    ALPHA = 0.05      # tension
+    BETA = 0.20       # bending
 
-    W_LINE = 1.0
+    W_LINE = 0.0
     W_EDGE = 1.0
-    W_TERM = 1.0
+    W_TERM = 0.0
 
-    STEP_SIZE = 0.1
+    STEP_SIZE = 0.001
 
     force_field = compute_image_force_field(
         image,
@@ -217,10 +217,12 @@ def main():
     snake = initialize_snake(initial_circle)
 
     display_snake(snake, image)
+    print("Press any key to start calculations")
+    cv2.waitKey(0)
 
     # TODO:
     # Replace with convergence criterion
-    for _ in range(200):
+    for i in range(200):
 
         internal = compute_internal_forces(
             snake,
@@ -240,7 +242,16 @@ def main():
             STEP_SIZE,
         )
 
+        print(np.max(np.linalg.norm(internal, axis=1)))
+        print(np.max(np.linalg.norm(external, axis=1)))
+
         display_snake(snake, image)
+
+        if (i + 1) % 10 == 0:
+            print(f"Update {i + 1}. Press any key to continue")
+            cv2.waitKey(0)
+        else:
+            cv2.waitKey(1)
 
     cv2.waitKey(0)
     close_window()

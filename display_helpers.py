@@ -1,12 +1,18 @@
 import cv2
 WINDOW_NAME = "Image"
 
+def get_int_point(point):
+    return (int(point[0]), int(point[1]))
+
 def display_snake(snake, image):
     display = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     for i, point in enumerate(snake):
         next_point = snake[(i + 1) % len(snake)]
-        cv2.circle(display, point, 1, (0, 0, 255), -1)  
-        cv2.line(display, point, next_point, (0, 0, 255), 1)
+        point_int = get_int_point(point)
+        next_point_int = get_int_point(next_point)
+
+        cv2.circle(display, point_int, 1, (0, 0, 255), -1)  
+        cv2.line(display, point_int, next_point_int, (0, 0, 255), 1)
     redraw_image(display)
 
 
