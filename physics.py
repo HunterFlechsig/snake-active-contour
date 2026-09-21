@@ -334,7 +334,9 @@ def evolve_snake(
             total_iterations += 1
 
             if on_iteration is not None:
-                on_iteration(total_iterations, snake, sigma, displacement)
+                keep_going = on_iteration(total_iterations, snake, sigma, displacement)
+                if keep_going is False:
+                    return snake, total_iterations
 
             if has_converged(history, snake, convergence):
                 snake = resample_snake(snake)

@@ -70,12 +70,13 @@ def display_snake(snake, image):
     redraw_image(display)
 
 
-def format_status(iteration, sigma, n_springs, n_volcanoes, paused):
+def format_status(iteration, sigma, n_springs, n_volcanoes, paused, finished=False):
+    state = "done" if finished else ("paused" if paused else "running")
     return (
         f"iter {iteration}  sigma={sigma:.1f}  "
         f"springs={n_springs}  "
         f"volcanoes={n_volcanoes}  "
-        f"{'paused' if paused else 'running'}"
+        f"{state}"
     )
 
 

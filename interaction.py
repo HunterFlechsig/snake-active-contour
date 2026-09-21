@@ -16,10 +16,16 @@ def nearest_snake_index(snake, point, max_dist):
 
 def make_pit_buttons(image_shape):
     _height, width = image_shape[:2]
-    button_w, button_h, gap, top = 128, 26, 8, 8
+    button_w, button_h, gap, top = 118, 26, 6, 8
     mouse_x = width - gap - button_w
     place_x = mouse_x - gap - button_w
+    auto_x = place_x - gap - button_w
     return [
+        {
+            "id": "auto",
+            "label": "Auto finish",
+            "rect": (auto_x, top, button_w, button_h),
+        },
         {
             "id": "place",
             "label": "Place volcano",
@@ -53,6 +59,8 @@ class SnakePit:
         self.place_mode = False
         self.mouse_volcano_on = False
         self.volcano_live = False
+        self.auto_requested = False
+        self.auto_running = False
 
     def handle_mouse(self, event, x, y, snake, buttons=None):
         self.mouse = np.array([x, y], dtype=np.float64)
@@ -69,6 +77,9 @@ class SnakePit:
                 return
             if hit == "mouse":
                 self.mouse_volcano_on = not self.mouse_volcano_on
+                return
+            if hit == "auto":
+                self.auto_requested = True
                 return
             if self.place_mode:
                 self.placed_volcanoes.append(self.mouse.copy())
@@ -110,6 +121,8 @@ class SnakePit:
             active.append("place")
         if self.mouse_volcano_on or self.volcano_live:
             active.append("mouse")
+        if self.auto_running or self.auto_requested:
+            active.append("auto")
         return active
 
     def _grab_or_make_spring(self, snake):
@@ -202,12 +215,13 @@ def install_pit_mouse(pit, holder, buttons):
 
 
 def handle_key(key, pit, snake, paused, sigma):
-    """Apply one live-loop key. Returns (quit, paused, sigma, rebuild_forces)."""
+    """Apply one live-loop key. Returns (quit, paused, sigma, rebuild_forces, start_auto)."""
 
     if key == ord("q"):
-        return True, paused, sigma, False
+        return True, paused, sigma, False, False
 
     rebuild_forces = False
+    start_auto = key == ord("a")
 
     if key == ord(" "):
         paused = not paused
@@ -222,7 +236,7 @@ def handle_key(key, pit, snake, paused, sigma):
         rebuild_forces = True
         print(f"sigma = {sigma:.1f}")
 
-    return False, paused, sigma, rebuild_forces
+    return False, paused, sigma, rebuild_forces, start_auto
 
 
 def print_runtime_help():
@@ -230,7 +244,7 @@ def print_runtime_help():
     print("Place volcano: click the button, then click the image to pin one.")
     print("Mouse volcano: toggle the button, or hold right-click to follow the cursor.")
     print("Left-drag a bead: spring. x/M-click deletes the nearest spring or volcano.")
-    print("1-5 change blur, space pauses, v clears volcanoes, s clears springs, q quits.")
+    print("1-5 change blur, space pauses, a / Auto finish settles then stops, v clears volcanoes, q quits.")
 
 
 def get_initial_contour(image):
