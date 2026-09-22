@@ -20,7 +20,7 @@ from physics import (
     _build_stiffness_matrix,
 )
 
-OUT = Path(__file__).resolve().parent
+OUT = Path(__file__).resolve().parents[1] / "images"
 
 ALPHA = 0.08
 BETA = 0.40
@@ -404,6 +404,57 @@ def main():
         ax.set_axis_off()
     fig.tight_layout()
     save(fig, "iteration.png")
+
+    # Same start, different alpha, beta, blur, and image weights.
+    # The notch between the disk and the square is washed out at sigma=3.
+    parameter_cases = [
+        (
+            r"$\alpha=0.08$, $\beta=0.40$" "\n" r"$\sigma=3$, edge",
+            0.08, 0.40, 0.0, 1.0, 0.0, 3.0,
+        ),
+        (
+            r"$\alpha=0.08$, $\beta=0.02$" "\n" r"$\sigma=3$, edge",
+            0.08, 0.02, 0.0, 1.0, 0.0, 3.0,
+        ),
+        (
+            r"$\alpha=0.08$, $\beta=0.40$" "\n" r"$\sigma=1$, edge",
+            0.08, 0.40, 0.0, 1.0, 0.0, 1.0,
+        ),
+        (
+            r"$\alpha=0.08$, $\beta=0.02$" "\n" r"$\sigma=1$, edge",
+            0.08, 0.02, 0.0, 1.0, 0.0, 1.0,
+        ),
+        (
+            r"$\alpha=0.40$, $\beta=0.02$" "\n" r"$\sigma=1$, edge",
+            0.40, 0.02, 0.0, 1.0, 0.0, 1.0,
+        ),
+        (
+            r"$\alpha=0.08$, $\beta=0.02$" "\n" r"$\sigma=1$, edge+term",
+            0.08, 0.02, 0.0, 1.0, 1.0, 1.0,
+        ),
+    ]
+    fig, axes = plt.subplots(2, 3, figsize=(7.4, 5.8))
+    for ax, (label, alpha, beta, w_line, w_edge, w_term, sigma) in zip(
+        axes.ravel(), parameter_cases,
+    ):
+        force = compute_image_force_field(image, w_line, w_edge, w_term, sigma)
+        inv_case = build_implicit_operator_inverse(len(circle), alpha, beta, GAMMA)
+        snake = circle.copy()
+        for i in range(1, 1001):
+            previous = snake
+            snake = step_snake(
+                snake, inv_case, GAMMA, KAPPA, force, MAX_PX_MOVE, image.shape,
+            )
+            if i > 400 and np.max(np.linalg.norm(snake - previous, axis=1)) < 0.02:
+                break
+        ax.imshow(image, cmap="gray", vmin=0, vmax=255, origin="upper")
+        overlay_snake(ax, snake, color="#d62728", lw=1.05, ms=3)
+        ax.set_xlim(55, 340)
+        ax.set_ylim(290, 80)
+        ax.set_title(label, fontsize=9)
+        ax.set_axis_off()
+    fig.tight_layout()
+    save(fig, "parameters.png")
     print("done")
 
 

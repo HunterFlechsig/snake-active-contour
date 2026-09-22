@@ -1,4 +1,4 @@
-"""Kass snake: init, stiffness, image energy, constraints, update, resample, clip."""
+"""Kass snake: init, stiffness, image energy, constraints, update, clip."""
 
 import math
 from collections import deque
@@ -226,26 +226,6 @@ def clip_snake_to_image(snake, image_shape):
     clipped[:, 1] = np.clip(clipped[:, 1], 0.0, height - 1.0)
     return clipped
 
-
-def resample_snake(snake):
-    """Re-space points uniformly along the closed contour; keep count fixed."""
-
-    n = len(snake)
-    closed = np.vstack([snake, snake[:1]])
-    segment_lengths = np.linalg.norm(np.diff(closed, axis=0), axis=1)
-    cumulative = np.concatenate([[0.0], np.cumsum(segment_lengths)])
-    perimeter = cumulative[-1]
-
-    if perimeter < 1e-6:
-        return snake.copy()
-
-    samples = np.linspace(0.0, perimeter, n, endpoint=False)
-    x = np.interp(samples, cumulative, closed[:, 0])
-    y = np.interp(samples, cumulative, closed[:, 1])
-
-    return np.column_stack([x, y])
-
-
 def has_converged(history, snake, threshold):
 
     if len(history) < history.maxlen:
@@ -352,7 +332,6 @@ def evolve_snake(
     max_iterations,
     convergence,
     max_px_move,
-    resample_every,
     on_iteration=None,
 ):
 
@@ -371,7 +350,6 @@ def evolve_snake(
             sigma,
         )
 
-        snake = resample_snake(snake)
         history = deque(maxlen=10)
 
         for iteration in range(max_iterations):
@@ -396,14 +374,9 @@ def evolve_snake(
                     return snake, total_iterations
 
             if has_converged(history, snake, convergence):
-                snake = resample_snake(snake)
                 break
 
             history.append(snake.copy())
-
-            if resample_every and (iteration + 1) % resample_every == 0:
-                snake = resample_snake(snake)
-                history.clear()
 
     return snake, total_iterations
 
@@ -422,7 +395,6 @@ def evolve_snakes(
     max_iterations,
     convergence,
     max_px_move,
-    resample_every,
     on_iteration=None,
 ):
     snakes = [snake.astype(np.float64, copy=True) for snake in snakes]
@@ -436,7 +408,6 @@ def evolve_snakes(
         force_field = compute_image_force_field(
             image, w_line, w_edge, w_term, sigma,
         )
-        snakes = [resample_snake(snake) for snake in snakes]
         histories = [deque(maxlen=10) for _ in snakes]
 
         for iteration in range(max_iterations):
@@ -467,15 +438,9 @@ def evolve_snakes(
                 has_converged(history, snake, convergence)
                 for history, snake in zip(histories, snakes)
             ):
-                snakes = [resample_snake(snake) for snake in snakes]
                 break
 
             for history, snake in zip(histories, snakes):
                 history.append(snake.copy())
-
-            if resample_every and (iteration + 1) % resample_every == 0:
-                snakes = [resample_snake(snake) for snake in snakes]
-                for history in histories:
-                    history.clear()
 
     return snakes, total_iterations

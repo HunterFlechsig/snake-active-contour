@@ -142,7 +142,6 @@ def main():
     AUTO_SIGMAS = (5.0, 3.0, 1.5)
     AUTO_MAX_ITERATIONS = 800
     AUTO_CONVERGENCE = 0.08
-    AUTO_RESAMPLE_EVERY = 25
 
     display_image(image)
 
@@ -252,7 +251,6 @@ def main():
             max_iterations=AUTO_MAX_ITERATIONS,
             convergence=AUTO_CONVERGENCE,
             max_px_move=MAX_PX_MOVE,
-            resample_every=AUTO_RESAMPLE_EVERY,
             on_iteration=on_iteration,
         )
         iteration = start_iteration + extra

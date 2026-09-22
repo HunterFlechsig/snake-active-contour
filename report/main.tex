@@ -1,4 +1,4 @@
-\documentclass[11pt]{article}
+\documentclass[11pt,twocolumn]{article}
 
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb}
@@ -7,8 +7,6 @@
 \usepackage[utf8]{inputenc}
 \usepackage{natbib}
 \usepackage[colorlinks=true,citecolor=blue,linkcolor=black,urlcolor=blue]{hyperref}
-
-\graphicspath{{figures/}}
 
 \title{An implementation of Kass snakes in Python}
 \author{Hunter}
@@ -47,7 +45,7 @@ The live program then runs with a fixed set of constants. Kass states the energi
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{init.png}
+  \includegraphics[width=\linewidth]{images/init.png}
   \caption{Initialization. Left: a center click and a rim click become a circle of beads. Right: polyline clicks are closed and filled in. Yellow dots are the clicks. Red is the bead loop.}
   \label{fig:init}
 \end{figure}
@@ -67,22 +65,18 @@ In code each stencil is the identity matrix, rolled left and right, so the wrap 
 \begin{equation}
   A = -\alpha D_2 + \beta D_4.
 \end{equation}
-$A$ is built once from the number of beads, $\alpha$, and $\beta$. It does not depend on where the beads sit.
-
-Figure~\ref{fig:stiffness} is that matrix for a 16-bead loop. The ring shows who bead 0 is tied to: the two neighbors, and the beads two steps away. The heatmap is $A$, with row 0 boxed. Pale blue is zero. The corner squares wrap the loop.
-
-Applying $A$ to the current positions is the internal pull on every bead at once. Figure~\ref{fig:internal} draws that pull on a loop with one wide gap and one kink. These arrows sit on the beads. The red beads bound the gap, and under tension the arrows there point across it, so the gap closes. The blue bead is the kink, and under bending the arrow there points back toward the loop, so the kink flattens.
+$A$ is built once from the number of beads, $\alpha$, and $\beta$. It does not depend on where the beads sit. Figure~\ref{fig:stiffness} is that matrix for a 16-bead loop. Applying $A$ to the current positions is the internal pull on every bead at once (Figure~\ref{fig:internal}).
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.95\linewidth]{stiffness_matrix.png}
+  \includegraphics[width=0.95\linewidth]{images/stiffness_matrix.png}
   \caption{A 16-bead loop, and the weights in $A$. Pale blue is zero. The ring shows who bead 0 is tied to; the red box is row 0.}
   \label{fig:stiffness}
 \end{figure}
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.95\linewidth]{internal_forces.png}
+  \includegraphics[width=0.95\linewidth]{images/internal_forces.png}
   \caption{Internal pull on a loop with a gap (red) and a kink (blue). Left: tension points across the gap. Right: bending points the kink back toward the loop. Arrow length is scaled separately in each panel.}
   \label{fig:internal}
 \end{figure}
@@ -121,9 +115,7 @@ Termination energy is the curvature of the level lines of the blurred image \cit
 \end{equation}
 with $\varepsilon = 10^{-8}$ so a flat region does not divide by zero.
 
-The three arrays are combined with the weights, then divided by their maximum absolute value, so the step size does not depend on raw Sobel units. This run, and the live defaults, use $w_{\mathrm{line}}=0$, $w_{\mathrm{edge}}=1$, $w_{\mathrm{term}}=0$. Line and termination are still computed, so those weights can be turned on.
-
-Figure~\ref{fig:image-energy} shows each term on its own, before that mix. Darker is lower energy. The orange line is the row plotted underneath. Dashed marks the disk's outer edge, dotted the square's outer edge, and dash-dot the ends of the stroke. Along that row, line energy is a high plateau on the white shape and a dip on the black stroke. Edge energy is a well at each boundary the row crosses. Termination stays near zero across the disk and the square, and spikes at the two ends of the stroke. The square's corners lie off this row. In the termination image those corners are dark, the stroke ends are bright, and the disk's boundary is only a faint curve.
+The three arrays are combined with the weights, then divided by their maximum absolute value, so the step size does not depend on raw Sobel units. This run, and the live defaults, use $w_{\mathrm{line}}=0$, $w_{\mathrm{edge}}=1$, $w_{\mathrm{term}}=0$. Line and termination are still computed, so those weights can be turned on. Figure~\ref{fig:image-energy} shows each term on its own, before that mix.
 
 Image force is $\nabla E_{\mathrm{image}}$. The code takes that gradient with \texttt{np.gradient} on the combined field.
 
@@ -135,12 +127,12 @@ A bead sits between pixel centers. The force at that bead is a bilinear blend of
   \end{aligned}
 \end{equation}
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{image_energy.png}
-  \caption{Line, edge, and termination energy. Darker is lower. The orange line is the plotted row. Dashed: disk. Dotted: square. Dash-dot: stroke. Termination is scaled so the corners and the stroke ends read; larger values saturate.}
+  \includegraphics[width=\textwidth]{images/image_energy.png}
+  \caption{Line, edge, and termination energy, each before the weighted mix. Darker is lower. The orange line is the plotted row. Dashed marks the disk's outer edge, dotted the square's outer edge, and dash-dot the ends of the stroke. Along that row, line energy is a high plateau on the white shape and a dip on the black stroke. Edge energy is a well at each boundary the row crosses. Termination stays near zero across the disk and the square, and spikes at the two ends of the stroke. The square's corners lie off this row. In the termination image those corners are dark, the stroke ends are bright, and the disk's boundary is only a faint curve. Termination is scaled so the corners and the stroke ends read; larger values saturate.}
   \label{fig:image-energy}
-\end{figure}
+\end{figure*}
 
 \subsection{External energy}
 
@@ -165,13 +157,20 @@ A volcano at $p$ is a $1/r$ repulsion, with strength $c=900$, cut off inside a c
 \end{equation}
 A click places a volcano that stays put. Right-dragging, or the mouse-volcano toggle, puts $p$ at the cursor. Beads outside the crater are pushed away from $p$. Beads inside feel nothing.
 
-Figure~\ref{fig:constraints} shows both on the running example. Springs on the left pull beads outward toward the pins. The volcano on the right pushes beads away, and that side of the contour bends inward.
+Figure~\ref{fig:constraints} shows both on the running example. Figure~\ref{fig:fixing-corners} uses a spring on one corner of the square.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{constraints2.png}
+  \includegraphics[width=\linewidth]{images/constraints2.png}
   \caption{Springs pull beads outward on the left. The volcano on the right pushes beads away, so the contour bends in on that side.}
   \label{fig:constraints}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{images/fixing_corners.png}
+  \caption{A spring fixes one corner of the square. The orange pin on the top-right corner pulls that bead out, so the contour turns a sharp corner there. The pin on the bottom edge does not sit on the bottom-right corner, and bending leaves that corner rounded.}
+  \label{fig:fixing-corners}
 \end{figure}
 
 \subsection{Iteration}
@@ -191,12 +190,25 @@ Figure~\ref{fig:iteration} is the circle from Figure~\ref{fig:init} under edge e
 
 Auto-finish repeats this step while $\sigma$ walks through $5$, $3$, and $1.5$, and stops when the contour has stayed within $0.08$~px of a recent position.
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{iteration.png}
+  \includegraphics[width=\textwidth]{images/iteration.png}
   \caption{Edge energy only, from the circle in Figure~\ref{fig:init}. The loop tightens, meets the boundary, and settles. The square's corners stay rounded.}
   \label{fig:iteration}
-\end{figure}
+\end{figure*}
+
+\subsection{Parameter choices}
+
+The contour in Figure~\ref{fig:iteration} settles with $\alpha=0.08$, $\beta=0.40$, and $\sigma=3$, and with only the edge term on. Two parts of the blob are missed. The right corners of the square stay rounded, and the beads bridge the notch where the disk meets the square.
+
+Figure~\ref{fig:parameters} runs the same start with those constants changed one at a time. Lowering $\beta$ to $0.02$ at $\sigma=3$ sharpens the right corners. The notch stays bridged: a blur that wide has already rounded the edge well, so there is no pit in the notch for the beads to fall into. At $\sigma=1$ the well follows the notch and the square corners. $\beta=0.40$ still rounds both. $\beta=0.02$ lets the beads sit in the notch and on the corners. Raising $\alpha$ to $0.40$, with that same low bend and sharp blur, pulls the loop off the square and onto the disk. Adding termination, $w_{\mathrm{term}}=1$, smooths the notch back out.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{images/parameters.png}
+  \caption{Same initial circle, after it settles. Top left is the default in Figure~\ref{fig:iteration}. Lower $\beta$ sharpens the square's right corners. The notch appears only once $\sigma=1$ and $\beta$ is low. High $\alpha$ leaves the square. Termination smooths the notch.}
+  \label{fig:parameters}
+\end{figure*}
 
 \subsection{Outside code}
 
@@ -205,6 +217,53 @@ The energies, $A$, and~\eqref{eq:implicit} are from Kass, Witkin, and Terzopoulo
 Blur and Sobel are OpenCV \cite{bradski2000opencv}. The inverse of $A+\gamma I$ is NumPy's dense inverse \cite{harris2020numpy}.
 
 scikit-image's \texttt{active\_contour} was read for that dense inverse and for the $\tanh$ cap \cite{vanderwalt2014scikit}. This implementation uses Kass edge energy, and it does not call scikit-image.
+
+\section{Harder examples}
+
+The same constants as the synthetic run, $\alpha=0.08$, $\beta=0.40$, $\gamma=0.10$, $\kappa=1$, and $\sigma=3$, were used on three photographs. The horseshoe run stopped at step 500. The hand and the quarter were still moving when those runs ended.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{images/hard_horseshoe.png}
+  \caption{Horseshoe. At step 0 the circle sits outside the shoe. At step 500 the beads lie on the outer rim, and a straight segment closes the opening between the two tips.}
+  \label{fig:hard-horseshoe}
+\end{figure*}
+
+Figure~\ref{fig:hard-horseshoe} starts from a circle around the shoe. By step 500 the loop has tightened onto the outer metal edge. The inner curve stays inside the loop. The two tips are joined by a straight run of beads across empty background.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{images/hard_hand.png}
+  \caption{Hand. At step 500 the loop touches the fingertips and bridges the gaps. By step 2000 it has left the index and middle fingers. At step 9052 it sits on the palm and the ring.}
+  \label{fig:hard-hand}
+\end{figure*}
+
+Figure~\ref{fig:hard-hand} starts outside the hand. At step 500 the contour is a smooth oval on the fingertips, the thumb, and the side of the palm. The gaps between the fingers are bridged. By step 2000 the index and middle fingers are outside the loop, and the ring and little finger are still touched at the tips. At step 9052 the loop has left the fingers and lies on the palm, caught on the ring.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{images/hard_quarter.png}
+  \caption{Quarter. At step 200 the beads lie on the profile, the hair, and the neck. By step 2500 the top and the back of the head have been left. At step 5262 the loop is on the face.}
+  \label{fig:hard-quarter}
+\end{figure*}
+
+Figure~\ref{fig:hard-quarter} starts from a circle around the head, inside the rim of the coin. At step 200 the beads are on the outline: forehead, nose, lips, chin, neck, and the back of the hair. By step 2500 the top of the loop has left the hair and cuts across it, and the back has moved in toward the queue. The nose, mouth, and chin stay on the profile. At step 5262 the contour is a small loop on the face. The hair and the neck are outside it.
+
+\section{Discussion}
+
+On the synthetic blob the interior is empty and the boundary is one edge. The loop tightens onto that edge and stays. These three photographs have more than one place for a bead to sit, and the internal energy keeps shortening and smoothing the loop after it has arrived.
+
+The horseshoe is the notch from Figure~\ref{fig:parameters}, on a larger opening. The outer rim is a strong edge against a flat background, so those beads stay. Across the tips there is no edge. With $\beta=0.40$ the bending term draws the same kind of chord that bridged the disk and the square. A path down the inner curve and back out is longer and more bent, so the straight closing segment is where the loop stops. The run had settled by step 500.
+
+The hand is a set of those openings side by side. At step 500 the beads on the fingertips are on the skin edge, and the beads between the fingers are already off it. Tension pulls along the contour, so a bead on a fingertip is pulled toward the chord in the gap. The loop shortens. Creases in the palm and the ring are edges inside the hand, and the shrinking loop finds them. That is why the contour can touch the outline and later leave it: the neighbors that have already bridged the gap drag the rest off. The run was still moving at step 9052, with the loop on the palm.
+
+The quarter shows the same leaving on a contour that did find the outline. At step 200 the beads are on the profile. The portrait is full of other edges: grooves in the hair, the eye, the mouth, the lettering. The boundary of the hair is a weak edge next to those grooves. A bead that steps inward lands in another well. Because each bead is tied to its neighbors, the beads that are still on the outline are pulled off with it. The nose, lips, and chin are a stronger edge, so that part of the loop stays while the top and the back leave. By step 5262 the short loop on the face is what remains. This is the same shortening that, with $\alpha=0.40$ on the synthetic image, pulled the snake off the square and onto the disk. Here $\alpha$ is still $0.08$; the extra wells inside the head do the pulling.
+
+Figure~\ref{fig:fixing-corners} is the other side of this. A spring on one corner holds that bead out where bending would round it off. These three runs placed no spring and no volcano. Once a bead left the outline, nothing in the update put it back.
+
+\section{Conclusion}
+
+With these constants the snake settles on a short, smooth loop in a strong image well. On the synthetic blob that loop is the object boundary. On the horseshoe it is the outer rim with the opening closed. On the hand it is the palm. On the quarter the beads reach the profile and are then pulled onto the face. A constraint can hold a bead that the image force and the internal energy will not keep there.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}
