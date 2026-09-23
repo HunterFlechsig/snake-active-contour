@@ -35,7 +35,7 @@ The vertices from the introduction are the beads of the snake. This section writ
 
 Kass gives the energies of a snake that already exists. The user supplies the first contour. A circle is a center click and a rim click. A polyline is a run of clicks that the program closes. Either outline is then filled in to a working loop of beads. With the default density of $0.5$, the spacing is about one bead every four pixels of perimeter, and a circle keeps at least eight beads. Figure~\ref{fig:init} shows both modes. Yellow dots are the clicks. The red loop is the beads. Later figures use the circle.
 
-The live program then runs with a fixed set of constants. Kass states the energies and the implicit step; these are the values chosen for this implementation. Each one is used in the subsection named with it.
+The live program then runs with a fixed set of constants. Kass states the energies and the implicit step; these are the program defaults. `--alpha`, `--beta`, `--gamma`, `--kappa`, `--sigma`, and the image-term weights override them. `--skimage` sets $\alpha$, $\beta$, and $\gamma$ to the scikit-image astronaut example. Each default is used in the subsection named with it.
 \begin{itemize}
   \item $\alpha=0.08$, $\beta=0.40$: tension and bending (internal energy).
   \item $\gamma=0.10$, $\kappa=1$: stay near the current contour, and weight the image force (iteration).
@@ -259,11 +259,31 @@ The hand is a set of those openings side by side. At step 500 the beads on the f
 
 The quarter shows the same leaving on a contour that did find the outline. At step 200 the beads are on the profile. The portrait is full of other edges: grooves in the hair, the eye, the mouth, the lettering. The boundary of the hair is a weak edge next to those grooves. A bead that steps inward lands in another well. Because each bead is tied to its neighbors, the beads that are still on the outline are pulled off with it. The nose, lips, and chin are a stronger edge, so that part of the loop stays while the top and the back leave. By step 5262 the short loop on the face is what remains. This is the same shortening that, with $\alpha=0.40$ on the synthetic image, pulled the snake off the square and onto the disk. Here $\alpha$ is still $0.08$; the extra wells inside the head do the pulling.
 
+Figure~\ref{fig:astronaut} is one circle around another head, under two numeric sets. The middle panel uses this implementation's $\alpha=0.08$, $\beta=0.40$, and $\gamma=0.10$. The loop leaves the hair and sits on the face, as on the quarter. The right panel is scikit-image's \texttt{active\_contour} with the constants from that library's astronaut example: $\alpha=0.015$, $\beta=10$, $\gamma=0.001$ \cite{vanderwalt2014scikit}. That contour stays on the head.
+
+Kass states the energies, not these numbers. A set that settles on the synthetic blob shrinks through the hair here. A set published for an astronaut photograph holds the outline. There is no rule in the paper that maps an image to $\alpha$, $\beta$, and $\gamma$. Finding a set that keeps the beads on the intended edge is trial, and a set that works on one image can fail on the next. Putting those scikit-image numbers into this solver, still with Kass edge energy, does not copy the right-hand contour.
+
+Figure~\ref{fig:hard-params} is that same substitution on the three photographs, from the live defaults, with only $\alpha$, $\beta$, and $\gamma$ changed. On the horseshoe both still close the opening. On the hand the default set has already left the fingers; the published set holds a larger loop on the palm. On the quarter the published set leaves the outline sooner.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{images/hard_params.png}
+  \caption{Same starts as the harder examples. Left: live defaults. Right: \texttt{--skimage} ($\alpha=0.015$, $\beta=10$, $\gamma=0.001$) in this solver.}
+  \label{fig:hard-params}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{images/astronaut.png}
+  \caption{Same initial circle around the astronaut's head. Middle: this implementation with the live defaults. The loop leaves the hair and sits on the face. Right: scikit-image \texttt{active\_contour} with $\alpha=0.015$, $\beta=10$, $\gamma=0.001$.}
+  \label{fig:astronaut}
+\end{figure*}
+
 Figure~\ref{fig:fixing-corners} is the other side of this. A spring on one corner holds that bead out where bending would round it off. These three runs placed no spring and no volcano. Once a bead left the outline, nothing in the update put it back.
 
 \section{Conclusion}
 
-With these constants the snake settles on a short, smooth loop in a strong image well. On the synthetic blob that loop is the object boundary. On the horseshoe it is the outer rim with the opening closed. On the hand it is the palm. On the quarter the beads reach the profile and are then pulled onto the face. A constraint can hold a bead that the image force and the internal energy will not keep there.
+With these constants the snake settles on a short, smooth loop in a strong image well. On the synthetic blob that loop is the object boundary. On the horseshoe it is the outer rim with the opening closed. On the hand it is the palm. On the quarter the beads reach the profile and are then pulled onto the face. On the astronaut they leave the hair unless $\alpha$, $\beta$, and $\gamma$ are replaced by a set published for that photograph. A constraint can hold a bead that the image force and the internal energy will not keep there.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}

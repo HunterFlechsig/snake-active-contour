@@ -19,18 +19,19 @@ from physics import (
     step_snake,
     _build_stiffness_matrix,
 )
+import defaults
 
 OUT = Path(__file__).resolve().parents[1] / "images"
 
-ALPHA = 0.08
-BETA = 0.40
-GAMMA = 0.10
-KAPPA = 1.00
-SIGMA = 3.0
-MAX_PX_MOVE = 1.0
-SPRING_K = 0.08
-VOLCANO_K = 900.0
-VOLCANO_RADIUS = 20.0
+ALPHA = defaults.ALPHA
+BETA = defaults.BETA
+GAMMA = defaults.GAMMA
+KAPPA = defaults.KAPPA
+SIGMA = defaults.SIGMA
+MAX_PX_MOVE = defaults.MAX_PX_MOVE
+SPRING_K = defaults.SPRING_K
+VOLCANO_K = defaults.VOLCANO_K
+VOLCANO_RADIUS = defaults.VOLCANO_RADIUS
 
 # Canvas and shape. The transect is the horizontal midline: through the disk,
 # the square, and a short black stroke off to the right.

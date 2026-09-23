@@ -5,6 +5,7 @@ from pathlib import Path
 
 import cv2
 
+import defaults
 from display import (
     close_window,
     display_image,
@@ -24,6 +25,7 @@ from physics import (
     build_implicit_operator_inverse,
     compute_image_force_field,
     evolve_snakes,
+    initialize_snake,
     step_all_snakes,
 )
 
@@ -32,9 +34,22 @@ IMAGES_DIR = Path("images")
 DEFAULT_IMAGE = "coins.jpg"
 
 
+def parse_circle(value):
+    parts = value.split(",")
+    if len(parts) != 4:
+        raise argparse.ArgumentTypeError(
+            "circle must be CX,CY,RX,RY (center and a rim point)."
+        )
+    cx, cy, rx, ry = (float(part) for part in parts)
+    return (cx, cy), (rx, ry)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Kass snakes: click to place contours, then evolve.",
+        description=(
+            "Kass snakes: click to place contours, then evolve. "
+            "Hyperparameter defaults match the report live program."
+        ),
     )
     parser.add_argument(
         "--test",
@@ -67,7 +82,91 @@ def parse_args():
             f"(default: {DEFAULT_IMAGE})."
         ),
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--alpha",
+        type=float,
+        default=defaults.ALPHA,
+        help=f"Tension weight (default: {defaults.ALPHA}).",
+    )
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=defaults.BETA,
+        help=f"Bending weight (default: {defaults.BETA}).",
+    )
+    parser.add_argument(
+        "--gamma",
+        type=float,
+        default=defaults.GAMMA,
+        help=f"Implicit stay-put weight (default: {defaults.GAMMA}).",
+    )
+    parser.add_argument(
+        "--kappa",
+        type=float,
+        default=defaults.KAPPA,
+        help=f"Image-force scale (default: {defaults.KAPPA}).",
+    )
+    parser.add_argument(
+        "--sigma",
+        type=float,
+        default=defaults.SIGMA,
+        help=f"Gaussian blur width (default: {defaults.SIGMA}).",
+    )
+    parser.add_argument(
+        "--w-line",
+        type=float,
+        default=defaults.W_LINE,
+        help=f"Line-energy weight (default: {defaults.W_LINE}).",
+    )
+    parser.add_argument(
+        "--w-edge",
+        type=float,
+        default=defaults.W_EDGE,
+        help=f"Edge-energy weight (default: {defaults.W_EDGE}).",
+    )
+    parser.add_argument(
+        "--w-term",
+        type=float,
+        default=defaults.W_TERM,
+        help=f"Termination-energy weight (default: {defaults.W_TERM}).",
+    )
+    parser.add_argument(
+        "--skimage",
+        action="store_true",
+        help=(
+            "Use scikit-image astronaut-example α, β, γ "
+            f"({defaults.SKIMAGE_ALPHA}, {defaults.SKIMAGE_BETA}, "
+            f"{defaults.SKIMAGE_GAMMA}); other weights stay at defaults."
+        ),
+    )
+    parser.add_argument(
+        "--circle",
+        type=parse_circle,
+        metavar="CX,CY,RX,RY",
+        help="Skip clicking: build one closed snake from a center and a rim point.",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="No window. Requires --circle. Runs --steps (or --converge) and exits.",
+    )
+    parser.add_argument(
+        "--steps",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Headless iteration cap at the current σ (default: auto-finish max).",
+    )
+    args = parser.parse_args()
+    if args.skimage:
+        args.alpha = defaults.SKIMAGE_ALPHA
+        args.beta = defaults.SKIMAGE_BETA
+        args.gamma = defaults.SKIMAGE_GAMMA
+    if args.headless and args.circle is None:
+        parser.error("--headless requires --circle.")
+    if args.steps is None:
+        args.steps = defaults.AUTO_MAX_ITERATIONS
+    return args
 
 
 def resolve_image_path(name):
@@ -105,6 +204,20 @@ def build_operators(snakes, alpha, beta, gamma):
     ]
 
 
+def hyperparam_lines(args):
+    return [
+        f"alpha={args.alpha}",
+        f"beta={args.beta}",
+        f"gamma={args.gamma}",
+        f"kappa={args.kappa}",
+        f"sigma={args.sigma}",
+        f"w_line={args.w_line}",
+        f"w_edge={args.w_edge}",
+        f"w_term={args.w_term}",
+        f"skimage={args.skimage}",
+    ]
+
+
 def write_run_notes(folder, args, extra_lines):
     notes = folder / "run.txt"
     notes.write_text("\n".join([
@@ -112,6 +225,8 @@ def write_run_notes(folder, args, extra_lines):
         f"image={args.image}",
         f"converge={args.converge}",
         f"snapshot_every={args.snapshot_every}",
+        f"headless={args.headless}",
+        *hyperparam_lines(args),
         *extra_lines,
         "",
     ]))
@@ -125,59 +240,72 @@ def main():
 
     image = load_image(image_path)
 
-    ALPHA = 0.08
-    BETA = 0.40
-    GAMMA = 0.10
-    KAPPA = 1.00
+    alpha = args.alpha
+    beta = args.beta
+    gamma = args.gamma
+    kappa = args.kappa
+    w_line = args.w_line
+    w_edge = args.w_edge
+    w_term = args.w_term
+    sigma = args.sigma
+    max_px_move = defaults.MAX_PX_MOVE
+    spring_k = defaults.SPRING_K
+    volcano_k = defaults.VOLCANO_K
+    volcano_radius = defaults.VOLCANO_RADIUS
+    auto_sigmas = defaults.AUTO_SIGMAS
+    auto_max_iterations = defaults.AUTO_MAX_ITERATIONS
+    auto_convergence = defaults.AUTO_CONVERGENCE
 
-    W_LINE = 0.0
-    W_EDGE = 1.0
-    W_TERM = 0.0
+    if args.circle is not None:
+        snakes = [initialize_snake(list(args.circle), density=defaults.DENSITY)]
+    else:
+        if args.headless:
+            raise SystemExit("--headless requires --circle.")
+        display_image(image)
+        snakes = collect_snakes(image)
+        if not snakes:
+            close_window()
+            return
 
-    SIGMA = 3.0
-    MAX_PX_MOVE = 1.0
-    SPRING_K = 0.08
-    VOLCANO_K = 900.0
-    VOLCANO_RADIUS = 20.0
-    AUTO_SIGMAS = (5.0, 3.0, 1.5)
-    AUTO_MAX_ITERATIONS = 800
-    AUTO_CONVERGENCE = 0.08
-
-    display_image(image)
-
-    snakes = collect_snakes(image)
-    if not snakes:
-        close_window()
-        return
+    if not args.headless and args.circle is not None:
+        display_image(image)
 
     pit = SnakePit()
     holder = {"snakes": snakes}
-    install_pit_mouse(pit, holder)
+    if not args.headless:
+        install_pit_mouse(pit, holder)
 
     print(f"Starting with {len(snakes)} snake(s).")
     print(f"Image: {image_path}")
     print(f"Results folder: {out_dir}")
+    print(
+        f"α={alpha}  β={beta}  γ={gamma}  κ={kappa}  "
+        f"σ={sigma}  w_line={w_line}  w_edge={w_edge}  w_term={w_term}"
+    )
     if args.converge:
         print("Converge-first: snakes will settle before the live loop.")
     if args.snapshot_every > 0:
         print(f"Saving a snapshot every {args.snapshot_every} iterations.")
-    print_runtime_help()
+    if not args.headless:
+        print_runtime_help()
 
     force_field = compute_image_force_field(
-        image, W_LINE, W_EDGE, W_TERM, SIGMA,
+        image, w_line, w_edge, w_term, sigma,
     )
-    operators = build_operators(snakes, ALPHA, BETA, GAMMA)
+    operators = build_operators(snakes, alpha, beta, gamma)
     paused = False
     finished = False
     iteration = 0
 
     def draw_frame(current_snakes):
+        if args.headless:
+            return
         display = render_overlay(
             image,
             snakes=current_snakes,
             springs=pit.springs,
             volcanoes=pit.all_volcanoes(),
-            volcano_radius=VOLCANO_RADIUS,
+            volcano_radius=volcano_radius,
         )
         redraw_image(display)
 
@@ -194,7 +322,7 @@ def main():
             current_snakes,
             springs=pit.springs,
             volcanoes=pit.all_volcanoes(),
-            volcano_radius=VOLCANO_RADIUS,
+            volcano_radius=volcano_radius,
         )
         print(f"Saved {path}")
 
@@ -220,18 +348,25 @@ def main():
         pit.clear_springs()
         print("Auto finish: running until every snake settles (q aborts).")
 
-        def on_iteration(total_iterations, evolving_snakes, sigma, displacement):
+        def on_iteration(total_iterations, evolving_snakes, current_sigma, displacement):
             nonlocal iteration
             iteration = start_iteration + total_iterations
             holder["snakes"] = evolving_snakes
             draw_frame(evolving_snakes)
             maybe_snapshot(evolving_snakes, iteration)
+            if args.headless:
+                if total_iterations == 1 or total_iterations % 25 == 0:
+                    print(
+                        f"auto iter {total_iterations:4d}  sigma={current_sigma:.1f}  "
+                        f"max move={displacement:.4f} px"
+                    )
+                return True
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q"):
                 return False
             if total_iterations == 1 or total_iterations % 25 == 0:
                 print(
-                    f"auto iter {total_iterations:4d}  sigma={sigma:.1f}  "
+                    f"auto iter {total_iterations:4d}  sigma={current_sigma:.1f}  "
                     f"max move={displacement:.4f} px"
                 )
             return True
@@ -240,17 +375,17 @@ def main():
         current_snakes, extra = evolve_snakes(
             current_snakes,
             image,
-            alpha=ALPHA,
-            beta=BETA,
-            gamma=GAMMA,
-            kappa=KAPPA,
-            w_line=W_LINE,
-            w_edge=W_EDGE,
-            w_term=W_TERM,
-            sigmas=AUTO_SIGMAS,
-            max_iterations=AUTO_MAX_ITERATIONS,
-            convergence=AUTO_CONVERGENCE,
-            max_px_move=MAX_PX_MOVE,
+            alpha=alpha,
+            beta=beta,
+            gamma=gamma,
+            kappa=kappa,
+            w_line=w_line,
+            w_edge=w_edge,
+            w_term=w_term,
+            sigmas=auto_sigmas,
+            max_iterations=auto_max_iterations,
+            convergence=auto_convergence,
+            max_px_move=max_px_move,
             on_iteration=on_iteration,
         )
         iteration = start_iteration + extra
@@ -264,50 +399,90 @@ def main():
     if args.converge:
         snakes = run_auto_finish(snakes)
         holder["snakes"] = snakes
-        operators = build_operators(snakes, ALPHA, BETA, GAMMA)
+        operators = build_operators(snakes, alpha, beta, gamma)
         force_field = compute_image_force_field(
-            image, W_LINE, W_EDGE, W_TERM, SIGMA,
+            image, w_line, w_edge, w_term, sigma,
         )
         paused = True
         finished = True
-        print_status(SIGMA, paused, finished)
-        print("Converge-first finished. Live loop is paused — space to resume, q to quit.")
+        print_status(sigma, paused, finished)
+        if not args.headless:
+            print("Converge-first finished. Live loop is paused — space to resume, q to quit.")
+
+    if args.headless and not args.converge:
+        print(f"Headless: {args.steps} steps at σ={sigma}.")
+        for _ in range(args.steps):
+            snakes = step_all_snakes(
+                snakes,
+                operators,
+                gamma,
+                kappa,
+                force_field,
+                max_px_move,
+                image.shape,
+            )
+            holder["snakes"] = snakes
+            iteration += 1
+            maybe_snapshot(snakes, iteration)
+            if iteration == 1 or iteration % 50 == 0:
+                print_status(sigma, False, False)
+        finished = True
+        maybe_snapshot(snakes, iteration, tag="iter_final")
+        write_run_notes(
+            out_dir,
+            args,
+            [
+                f"n_snakes={len(snakes)}",
+                f"final_iteration={iteration}",
+                f"finished={finished}",
+            ],
+        )
+        print(f"Headless done after {iteration} iterations.")
+        return
+
+    if args.headless:
+        write_run_notes(
+            out_dir,
+            args,
+            [
+                f"n_snakes={len(snakes)}",
+                f"final_iteration={iteration}",
+                f"finished={finished}",
+            ],
+        )
+        return
 
     write_run_notes(
         out_dir,
         args,
         [
             f"n_snakes={len(snakes)}",
-            f"alpha={ALPHA}",
-            f"beta={BETA}",
-            f"gamma={GAMMA}",
-            f"kappa={KAPPA}",
-            f"sigma={SIGMA}",
+            *hyperparam_lines(args),
         ],
     )
 
     while True:
         key = cv2.waitKey(1) & 0xFF
-        should_quit, paused, SIGMA, rebuild_forces, start_auto = handle_key(
-            key, pit, snakes, paused, SIGMA,
+        should_quit, paused, sigma, rebuild_forces, start_auto = handle_key(
+            key, pit, snakes, paused, sigma,
         )
         if should_quit:
             break
         if rebuild_forces:
             force_field = compute_image_force_field(
-                image, W_LINE, W_EDGE, W_TERM, SIGMA,
+                image, w_line, w_edge, w_term, sigma,
             )
 
         if pit.auto_requested or start_auto:
             snakes = run_auto_finish(snakes)
             holder["snakes"] = snakes
-            operators = build_operators(snakes, ALPHA, BETA, GAMMA)
+            operators = build_operators(snakes, alpha, beta, gamma)
             force_field = compute_image_force_field(
-                image, W_LINE, W_EDGE, W_TERM, SIGMA,
+                image, w_line, w_edge, w_term, sigma,
             )
             paused = True
             finished = True
-            print_status(SIGMA, paused, finished)
+            print_status(sigma, paused, finished)
 
         pit.sync()
 
@@ -316,22 +491,22 @@ def main():
             snakes = step_all_snakes(
                 snakes,
                 operators,
-                GAMMA,
-                KAPPA,
+                gamma,
+                kappa,
                 force_field,
-                MAX_PX_MOVE,
+                max_px_move,
                 image.shape,
                 pit.springs,
                 pit.all_volcanoes(),
-                SPRING_K,
-                VOLCANO_K,
-                VOLCANO_RADIUS,
+                spring_k,
+                volcano_k,
+                volcano_radius,
             )
             holder["snakes"] = snakes
             iteration += 1
             maybe_snapshot(snakes, iteration)
             if iteration == 1 or iteration % 50 == 0:
-                print_status(SIGMA, paused, finished)
+                print_status(sigma, paused, finished)
 
         draw_frame(snakes)
 
@@ -341,11 +516,7 @@ def main():
         args,
         [
             f"n_snakes={len(snakes)}",
-            f"alpha={ALPHA}",
-            f"beta={BETA}",
-            f"gamma={GAMMA}",
-            f"kappa={KAPPA}",
-            f"sigma={SIGMA}",
+            *hyperparam_lines(args),
             f"final_iteration={iteration}",
             f"finished={finished}",
         ],
