@@ -2,4 +2,20 @@
 .venv/
 __pycache__/
 *.pyc
-uv.lock
+*.pyo
+
+# Headless and live iteration dumps. Report figures live in report/images/.
+results/
+
+*:Zone.Identifier
+.DS_Store
+
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc

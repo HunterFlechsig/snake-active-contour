@@ -9,7 +9,7 @@
 \usepackage[colorlinks=true,citecolor=blue,linkcolor=black,urlcolor=blue]{hyperref}
 
 \title{An implementation of Kass snakes in Python}
-\author{Hunter}
+\author{Hunter Flechsig}
 \date{}
 
 \begin{document}
@@ -249,7 +249,7 @@ Figure~\ref{fig:hard-hand} starts outside the hand. At step 500 the contour is a
 
 Figure~\ref{fig:hard-quarter} starts from a circle around the head, inside the rim of the coin. At step 200 the beads are on the outline: forehead, nose, lips, chin, neck, and the back of the hair. By step 2500 the top of the loop has left the hair and cuts across it, and the back has moved in toward the queue. The nose, mouth, and chin stay on the profile. At step 5262 the contour is a small loop on the face. The hair and the neck are outside it.
 
-\section{Discussion}
+\section{Discussion and conclusion}
 
 On the synthetic blob the interior is empty and the boundary is one edge. The loop tightens onto that edge and stays. These three photographs have more than one place for a bead to sit, and the internal energy keeps shortening and smoothing the loop after it has arrived.
 
@@ -281,9 +281,6 @@ Figure~\ref{fig:hard-params} is that same substitution on the three photographs,
 
 Figure~\ref{fig:fixing-corners} is the other side of this. A spring on one corner holds that bead out where bending would round it off. These three runs placed no spring and no volcano. Once a bead left the outline, nothing in the update put it back.
 
-\section{Conclusion}
-
-With these constants the snake settles on a short, smooth loop in a strong image well. On the synthetic blob that loop is the object boundary. On the horseshoe it is the outer rim with the opening closed. On the hand it is the palm. On the quarter the beads reach the profile and are then pulled onto the face. On the astronaut they leave the hair unless $\alpha$, $\beta$, and $\gamma$ are replaced by a set published for that photograph. A constraint can hold a bead that the image force and the internal energy will not keep there.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}
